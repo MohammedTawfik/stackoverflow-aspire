@@ -1,0 +1,53 @@
+# Visual Studio / IDE
+.vs/
+.vscode/
+.idea/
+
+# Build outputs
+**/bin/
+**/obj/
+artifacts/
+out/
+publish/
+
+# NuGet / packages
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.userprefs
+*.sln.docstates
+
+# Logs, test results, coverage
+*.log
+logs/
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+*.trx
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Resharper / Rider
+_ReSharper*/
+*.DotSettings.user
+
+# Local / secret configuration
+local.settings.json
+secrets.json
+appsettings.*.Local.json
+
+# Tooling / caches
+.vsconfig
+*.cache
+*.bak
+*.tmp
+
