@@ -1,5 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Questions.API.Data;
+using Questions.API.Services;
+using Wolverine;
+using Wolverine.RabbitMQ;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,11 +15,14 @@ builder.AddServiceDefaults();
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<TagsService>();
 builder.Services.AddAuthentication()
-    .AddKeycloakJwtBearer("keycloack","master", options => {
+    .AddKeycloakJwtBearer("keycloack", "master", options =>
+    {
         options.RequireHttpsMetadata = false;
         options.Audience = "overflow";
-});
+    });
 // Register the QuestionsDBContext using the Npgsql provider.
 // The connection string is resolved from a named connection string "questions-db" or
 // from a configuration value with the same key. Adjust as needed for your environment.
@@ -25,6 +33,19 @@ var questionsConnection = builder.Configuration.GetConnectionString("questions-d
 builder.Services.AddDbContext<QuestionsDBContext>(options =>
 {
     options.UseNpgsql(questionsConnection);
+});
+
+builder.Services.AddOpenTelemetry().WithTracing(traceProviderBuilder =>
+{
+    traceProviderBuilder.SetResourceBuilder(ResourceBuilder.CreateDefault()
+        .AddService(builder.Environment.ApplicationName))
+        .AddSource("Wolverine");
+});
+
+builder.Host.UseWolverine(opts =>
+{
+    opts.UseRabbitMqUsingNamedConnection("rabbitmq").AutoProvision();
+    opts.PublishAllMessages().ToRabbitExchange("questions");
 });
 
 var app = builder.Build();
@@ -50,7 +71,7 @@ try
 }
 catch (Exception ex)
 {
-   var logger = services.GetRequiredService<ILogger<Program>>();
+    var logger = services.GetRequiredService<ILogger<Program>>();
     logger.LogError(ex, "An error occurred while migrating or initializing the database.");
 }
 

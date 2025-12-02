@@ -1,23 +1,21 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Common.Contracts;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Questions.API.Data;
 using Questions.API.Data.Entities;
 using Questions.API.DTOs;
+using Questions.API.Services;
 using System.Security.Claims;
+using System.Threading.Tasks;
+using Wolverine;
 
 namespace Questions.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class QuestionsController : ControllerBase
+    public class QuestionsController(QuestionsDBContext _questionsDB, IMessageBus messageBus, TagsService tagsService) : ControllerBase
     {
-        private readonly QuestionsDBContext _questionsDB;
-        public QuestionsController(QuestionsDBContext questionsDB)
-        {
-            _questionsDB = questionsDB;
-        }
-
         [HttpGet]
         public IActionResult Get(string? tag)
         {
@@ -43,14 +41,11 @@ namespace Questions.API.Controllers
 
         [Authorize]
         [HttpPost]
-        public IActionResult Post([FromBody] DTOs.QuestionDto questionDto)
+        public async Task<IActionResult> Post([FromBody] DTOs.QuestionDto questionDto)
         {
-
-            var validTags = _questionsDB.Tags.Where(t => questionDto.Tags.Contains(t.Slug)).Select(tag => tag.Slug).ToList();
-            var missing = questionDto.Tags.Except(validTags).ToList();
-            if (missing.Any())
+            if (!await tagsService.AreTagsValidAsync(questionDto.Tags))
             {
-                return BadRequest($"The following tags are invalid: {string.Join(", ", missing)}");
+                return BadRequest("One or more tags are invalid.");
             }
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -68,14 +63,21 @@ namespace Questions.API.Controllers
                 Tags = questionDto.Tags,
             };
             _questionsDB.Questions.Add(question);
-            _questionsDB.SaveChanges();
-
+            await _questionsDB.SaveChangesAsync();
+            await messageBus.PublishAsync(new QuestionCreatedEvent
+            (
+                question.Id,
+                question.Title,
+                question.Content,
+                question.Tags,
+                question.CreatedAt
+            ));
             return CreatedAtAction(nameof(Get), new { id = question.Id }, question);
         }
 
         [Authorize]
         [HttpPut("{id}")]
-        public IActionResult Put(string id,[FromBody] QuestionDto question)
+        public async Task<IActionResult> Put(string id, [FromBody] QuestionDto question)
         {
             var existingQuestion = _questionsDB.Questions.Find(id);
             if (existingQuestion == null)
@@ -88,23 +90,28 @@ namespace Questions.API.Controllers
                 return Forbid();
             }
 
-            var validTags = _questionsDB.Tags.Where(t => question.Tags.Contains(t.Slug)).Select(tag => tag.Slug).ToList();
-            var missing = question.Tags.Except(validTags).ToList();
-            if (missing.Any())
+            if (!await tagsService.AreTagsValidAsync(question.Tags))
             {
-                return BadRequest($"The following tags are invalid: {string.Join(", ", missing)}");
+                return BadRequest("One or more tags are invalid.");
             }
             existingQuestion.Title = question.Title;
             existingQuestion.Content = question.Content;
             existingQuestion.UpdatedAt = DateTime.UtcNow;
             existingQuestion.Tags = question.Tags;
             _questionsDB.SaveChanges();
+            await messageBus.PublishAsync(new QuestionUpdatedEvent
+            (
+                existingQuestion.Id,
+                existingQuestion.Title,
+                existingQuestion.Content,
+                existingQuestion.Tags
+            ));
             return NoContent();
         }
 
         [Authorize]
         [HttpDelete("{id}")]
-        public IActionResult Delete(string id)
+        public async Task<IActionResult> Delete(string id)
         {
             var question = _questionsDB.Questions.Find(id);
             if (question == null)
@@ -118,6 +125,7 @@ namespace Questions.API.Controllers
             }
             _questionsDB.Questions.Remove(question);
             _questionsDB.SaveChanges();
+            await messageBus.PublishAsync(new QuestionDeletedEvent(id));
             return NoContent();
         }
     }
