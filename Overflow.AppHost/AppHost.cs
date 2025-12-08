@@ -41,5 +41,13 @@ var searchService = builder.AddProject<Projects.SearchService>("searchservice")
     .WaitFor(typeSense)
     .WaitFor(rabbitMq);
 
+var yarp = builder.AddYarp("yarp-gateway")
+    .WithConfiguration(config => {
+        config.AddRoute("/api/questions/{**catch-all}", questionsService);
+        config.AddRoute("/api/tags/{**catch-all}", questionsService);
+        config.AddRoute("/search/{**catch-all}", searchService);
+    })
+    .WithEnvironment("ASPNETCORE_URLS","http://*:8001")
+    .WithEndpoint(port: 8001, targetPort:8001, scheme: "http", name: "gateway", isExternal: true);
 
 builder.Build().Run();

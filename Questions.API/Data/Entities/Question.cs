@@ -20,5 +20,7 @@ namespace Questions.API.Data.Entities
         public List<string> Tags { get; set; } = [];
         public bool HasAcceptedAnswer { get; set; }
         public int Votes { get; set; }
+        public int AnswersCount { get; set; }
+        public List<Answer> Answers { get; set; } = [];
     }
 }

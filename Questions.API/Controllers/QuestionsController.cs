@@ -30,7 +30,9 @@ namespace Questions.API.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Question>> GetQuestionById(string id)
         {
-            var question = await _questionsDB.Questions.FindAsync(id);
+            var question = await _questionsDB.Questions
+                .Include(q => q.Answers)
+                .FirstOrDefaultAsync(q => q.Id == id);
             if (question == null)
             {
                 return NotFound();
@@ -50,6 +52,7 @@ namespace Questions.API.Controllers
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var userName = User.FindFirstValue("name");
+            Console.WriteLine($"UserId: {userId}, UserName: {userName}");
             if (userId is null || userName is null)
             {
                 return BadRequest("Cannot get user details");
@@ -127,6 +130,24 @@ namespace Questions.API.Controllers
             _questionsDB.SaveChanges();
             await messageBus.PublishAsync(new QuestionDeletedEvent(id));
             return NoContent();
+        }
+
+        [HttpGet("errors")]
+        public IActionResult GetErrors(int code)
+        {
+
+            ModelState.AddModelError("Problem One", "Validation problem one.");
+            ModelState.AddModelError("Problem Two", "Validation problem two.");
+
+            return code switch
+            {
+                400 => BadRequest("This is a bad request."),
+                401 => Unauthorized("You are not authorized."),
+                403 => Forbid("You do not have permission to access this resource."),
+                404 => NotFound("The requested resource was not found."),
+                500 => StatusCode(500, "An internal server error occurred."),
+                _ => ValidationProblem(ModelState)
+            };
         }
     }
 }
